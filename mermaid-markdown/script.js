@@ -15,11 +15,26 @@ class MarkdownMermaidWidget {
         this.elements = {
             loadingState: document.getElementById('loadingState'),
             emptyState: document.getElementById('emptyState'),
-            contentDisplay: document.getElementById('contentDisplay')
+            contentDisplay: document.getElementById('contentDisplay'),
+            contentWrapper: document.getElementById('contentWrapper'),
+            zoomControls: document.getElementById('zoomControls'),
+            zoomInBtn: document.getElementById('zoomIn'),
+            zoomOutBtn: document.getElementById('zoomOut'),
+            zoomResetBtn: document.getElementById('zoomReset'),
+            zoomLevel: document.getElementById('zoomLevel')
         };
         
         // Mermaid counter for unique IDs
         this.mermaidCounter = 0;
+        
+        // Zoom and pan state
+        this.zoomScale = 1;
+        this.minZoom = 0.25;
+        this.maxZoom = 5;
+        this.zoomStep = 0.25;
+        this.isPanning = false;
+        this.panStart = { x: 0, y: 0 };
+        this.panOffset = { x: 0, y: 0 };
         
         this.init();
     }
@@ -31,6 +46,7 @@ class MarkdownMermaidWidget {
         this.setupMarkdown();
         this.setupMermaid();
         this.setupThemeObserver();
+        this.setupZoomControls();
         this.initializeGrist();
     }
     
@@ -182,6 +198,210 @@ class MarkdownMermaidWidget {
     }
     
     /**
+     * Setup zoom and pan controls
+     */
+    setupZoomControls() {
+        if (!this.elements.zoomInBtn || !this.elements.zoomOutBtn || !this.elements.zoomResetBtn) {
+            console.warn('Zoom control elements not found');
+            return;
+        }
+        
+        // Zoom in button
+        this.elements.zoomInBtn.addEventListener('click', () => this.zoomIn());
+        
+        // Zoom out button
+        this.elements.zoomOutBtn.addEventListener('click', () => this.zoomOut());
+        
+        // Reset zoom button
+        this.elements.zoomResetBtn.addEventListener('click', () => this.resetZoom());
+        
+        // Mouse wheel zoom
+        this.elements.contentWrapper.addEventListener('wheel', (e) => this.handleWheel(e));
+        
+        // Touch zoom (pinch)
+        this.elements.contentWrapper.addEventListener('touchstart', (e) => this.handleTouchStart(e));
+        this.elements.contentWrapper.addEventListener('touchmove', (e) => this.handleTouchMove(e));
+        this.elements.contentWrapper.addEventListener('touchend', (e) => this.handleTouchEnd(e));
+        
+        // Pan functionality
+        this.elements.contentWrapper.addEventListener('mousedown', (e) => this.handlePanStart(e));
+        this.elements.contentWrapper.addEventListener('mousemove', (e) => this.handlePanMove(e));
+        this.elements.contentWrapper.addEventListener('mouseup', (e) => this.handlePanEnd(e));
+        this.elements.contentWrapper.addEventListener('mouseleave', (e) => this.handlePanEnd(e));
+        
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => this.handleKeydown(e));
+        
+        // Prevent context menu on content wrapper
+        this.elements.contentWrapper.addEventListener('contextmenu', (e) => e.preventDefault());
+    }
+    
+    /**
+     * Handle keyboard shortcuts
+     */
+    handleKeydown(e) {
+        if (this.elements.contentWrapper.style.display === 'none') return;
+        
+        switch (e.key) {
+            case '+':
+            case '=':
+                if (e.ctrlKey || e.metaKey) {
+                    e.preventDefault();
+                    this.zoomIn();
+                }
+                break;
+            case '-':
+                if (e.ctrlKey || e.metaKey) {
+                    e.preventDefault();
+                    this.zoomOut();
+                }
+                break;
+            case '0':
+                if (e.ctrlKey || e.metaKey) {
+                    e.preventDefault();
+                    this.resetZoom();
+                }
+                break;
+            case 'r':
+            case 'R':
+                if (!e.ctrlKey && !e.metaKey) {
+                    this.resetZoom();
+                }
+                break;
+        }
+    }
+    
+    /**
+     * Handle mouse wheel for zooming
+     */
+    handleWheel(e) {
+        if (e.ctrlKey || e.metaKey) {
+            e.preventDefault();
+            const delta = e.deltaY > 0 ? -this.zoomStep : this.zoomStep;
+            this.setZoom(this.zoomScale + delta);
+        }
+    }
+    
+    /**
+     * Handle touch events for pinch zoom
+     */
+    handleTouchStart(e) {
+        if (e.touches.length === 2) {
+            this.touchStartDistance = this.getTouchDistance(e.touches[0], e.touches[1]);
+            this.touchStartZoom = this.zoomScale;
+        }
+    }
+    
+    handleTouchMove(e) {
+        if (e.touches.length === 2 && this.touchStartDistance) {
+            e.preventDefault();
+            const currentDistance = this.getTouchDistance(e.touches[0], e.touches[1]);
+            const scale = currentDistance / this.touchStartDistance;
+            this.setZoom(this.touchStartZoom * scale);
+        }
+    }
+    
+    handleTouchEnd(e) {
+        if (e.touches.length < 2) {
+            this.touchStartDistance = null;
+            this.touchStartZoom = null;
+        }
+    }
+    
+    /**
+     * Get distance between two touch points
+     */
+    getTouchDistance(touch1, touch2) {
+        const dx = touch2.clientX - touch1.clientX;
+        const dy = touch2.clientY - touch1.clientY;
+        return Math.sqrt(dx * dx + dy * dy);
+    }
+    
+    /**
+     * Handle pan start
+     */
+    handlePanStart(e) {
+        if (e.button === 0 && this.zoomScale > 1) { // Left mouse button and zoomed in
+            this.isPanning = true;
+            this.panStart.x = e.clientX;
+            this.panStart.y = e.clientY;
+            this.elements.contentWrapper.style.cursor = 'grabbing';
+        }
+    }
+    
+    /**
+     * Handle pan move
+     */
+    handlePanMove(e) {
+        if (this.isPanning) {
+            const dx = e.clientX - this.panStart.x;
+            const dy = e.clientY - this.panStart.y;
+            
+            const newScrollLeft = this.elements.contentWrapper.scrollLeft - dx;
+            const newScrollTop = this.elements.contentWrapper.scrollTop - dy;
+            
+            this.elements.contentWrapper.scrollLeft = newScrollLeft;
+            this.elements.contentWrapper.scrollTop = newScrollTop;
+            
+            this.panStart.x = e.clientX;
+            this.panStart.y = e.clientY;
+        }
+    }
+    
+    /**
+     * Handle pan end
+     */
+    handlePanEnd(e) {
+        if (this.isPanning) {
+            this.isPanning = false;
+            this.elements.contentWrapper.style.cursor = this.zoomScale > 1 ? 'grab' : 'default';
+        }
+    }
+    
+    /**
+     * Zoom in
+     */
+    zoomIn() {
+        this.setZoom(this.zoomScale + this.zoomStep);
+    }
+    
+    /**
+     * Zoom out
+     */
+    zoomOut() {
+        this.setZoom(this.zoomScale - this.zoomStep);
+    }
+    
+    /**
+     * Reset zoom to 100%
+     */
+    resetZoom() {
+        this.setZoom(1);
+        this.elements.contentWrapper.scrollLeft = 0;
+        this.elements.contentWrapper.scrollTop = 0;
+    }
+    
+    /**
+     * Set zoom level
+     */
+    setZoom(scale) {
+        this.zoomScale = Math.max(this.minZoom, Math.min(this.maxZoom, scale));
+        
+        // Update transform
+        this.elements.contentDisplay.style.transform = `scale(${this.zoomScale})`;
+        
+        // Update zoom level display
+        this.elements.zoomLevel.textContent = `${Math.round(this.zoomScale * 100)}%`;
+        
+        // Update cursor
+        this.elements.contentWrapper.style.cursor = this.zoomScale > 1 ? 'grab' : 'default';
+        
+        // Update button states
+        this.elements.zoomInBtn.disabled = this.zoomScale >= this.maxZoom;
+        this.elements.zoomOutBtn.disabled = this.zoomScale <= this.minZoom;
+    }
+    
+    /**
      * Cleanup observers when widget is destroyed
      */
     destroy() {
@@ -295,7 +515,8 @@ class MarkdownMermaidWidget {
      */
     showEmptyState(message = 'No content to display') {
         this.elements.emptyState.style.display = 'block';
-        this.elements.contentDisplay.style.display = 'none';
+        this.elements.contentWrapper.style.display = 'none';
+        this.elements.zoomControls.style.display = 'none';
         
         const messageElement = this.elements.emptyState.querySelector('.empty-state-message');
         if (messageElement) {
@@ -329,11 +550,15 @@ class MarkdownMermaidWidget {
      */
     async renderContent(content) {
         this.elements.emptyState.style.display = 'none';
-        this.elements.contentDisplay.style.display = 'block';
+        this.elements.contentWrapper.style.display = 'block';
+        this.elements.zoomControls.style.display = 'flex';
         
         try {
             // Reset mermaid counter
             this.mermaidCounter = 0;
+            
+            // Reset zoom and pan
+            this.resetZoom();
             
             // Process content to extract and render Mermaid diagrams
             const processedContent = await this.processContentWithMermaid(content);

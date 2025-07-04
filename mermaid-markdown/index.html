@@ -28,17 +28,82 @@
         /* Content Display */
         .content-container {
             flex: 1;
-            overflow: auto;
+            overflow: hidden;
             padding: 16px;
             background-color: var(--grist-theme-bg);
+            position: relative;
+        }
+
+        .content-wrapper {
+            width: 100%;
+            height: calc(100vh - 80px);
+            overflow: auto;
+            position: relative;
+            cursor: grab;
+            border: 1px solid var(--grist-theme-widget-border);
+            border-radius: 4px;
+        }
+
+        .content-wrapper:active {
+            cursor: grabbing;
         }
 
         .content-display {
             max-width: 100%;
             background: var(--grist-theme-widget-bg);
-            border: 1px solid var(--grist-theme-widget-border);
-            border-radius: 4px;
             padding: 16px;
+            transform-origin: top left;
+            transition: transform 0.2s ease;
+            min-height: 100%;
+        }
+
+        /* Zoom Controls */
+        .zoom-controls {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            background: var(--grist-theme-widget-bg);
+            border: 1px solid var(--grist-theme-widget-border);
+            border-radius: 6px;
+            padding: 4px;
+            z-index: 10;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .zoom-btn {
+            background: var(--grist-theme-widget-bg);
+            border: 1px solid var(--grist-theme-widget-border);
+            color: var(--grist-theme-text);
+            border-radius: 4px;
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            transition: all 0.2s ease;
+        }
+
+        .zoom-btn:hover {
+            background: var(--grist-theme-selection);
+            color: var(--grist-theme-selection-fg, white);
+        }
+
+        .zoom-btn:active {
+            transform: scale(0.95);
+        }
+
+        .zoom-level {
+            font-size: 12px;
+            color: var(--grist-theme-text);
+            padding: 0 4px;
+            min-width: 35px;
+            text-align: center;
         }
 
         /* Markdown Styling */
@@ -278,6 +343,17 @@
             .content-display {
                 padding: 12px;
             }
+            
+            .zoom-controls {
+                top: 4px;
+                right: 4px;
+            }
+            
+            .zoom-btn {
+                width: 24px;
+                height: 24px;
+                font-size: 14px;
+            }
         }
     </style>
 </head>
@@ -285,6 +361,14 @@
     <div class="widget-container">
         <!-- Content Display -->
         <div class="content-container">
+            <!-- Zoom Controls -->
+            <div id="zoomControls" class="zoom-controls" style="display: none;">
+                <button id="zoomIn" class="zoom-btn" title="Zoom In (+)">+</button>
+                <button id="zoomOut" class="zoom-btn" title="Zoom Out (-)">−</button>
+                <button id="zoomReset" class="zoom-btn" title="Reset Zoom (R)">⌂</button>
+                <span id="zoomLevel" class="zoom-level">100%</span>
+            </div>
+            
             <div id="loadingState" class="loading">
                 <div class="loading-spinner"></div>
                 <div>Loading content...</div>
@@ -296,8 +380,10 @@
                 <div class="empty-state-hint">Configure the column mapping to see your Markdown and Mermaid content</div>
             </div>
             
-            <div id="contentDisplay" class="content-display" style="display: none;">
-                <!-- Rendered content will be inserted here -->
+            <div id="contentWrapper" class="content-wrapper" style="display: none;">
+                <div id="contentDisplay" class="content-display">
+                    <!-- Rendered content will be inserted here -->
+                </div>
             </div>
         </div>
     </div>
