@@ -472,6 +472,13 @@ class MarkdownMermaidWidget {
             this.mappings = mappings;
             this.handleRecordUpdate();
         });
+
+        // Listen for current record changes
+        grist.onNewRecord((record, mappings) => {
+            this.currentRecord = null;
+            this.mappings = null;
+            this.handleRecordUpdate();
+        });
     }
     
     /**
